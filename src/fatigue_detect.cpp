@@ -96,9 +96,10 @@ void FatigueDetect::detectFatigue(cv::Mat& image, dlib::shape_predictor& pose_mo
 {
     int* pResults = facedetect_cnn(pBuffer, (unsigned char*)(image.ptr(0)), image.cols, image.rows, (int)image.step);
 
-    printf("%d faces detected.\n", (pResults ? *pResults : 0));
-
     cv::Mat& result_image = image;
+
+    cv::putText(result_image, "Detected Faces: " + std::to_string(*pResults),
+            cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,255,0), 2);
 
     for(int i = 0; i < (pResults ? *pResults : 0); i++)
     {
@@ -109,7 +110,7 @@ void FatigueDetect::detectFatigue(cv::Mat& image, dlib::shape_predictor& pose_mo
         int w = p[3];
         int h = p[4];
 
-        if (confidence < 50) continue;
+        if (confidence < 70) continue;
 
         cv::rectangle(result_image, cv::Rect(x, y, w, h), cv::Scalar(0, 255, 0), 2);
         cv::Rect faceRect = cv::Rect(x, y, w, h) & cv::Rect(0, 0, image.cols, image.rows);
@@ -136,7 +137,7 @@ void FatigueDetect::detectFatigue(cv::Mat& image, dlib::shape_predictor& pose_mo
             double leftEAR = computeEAR(leftEyePts);
             double rightEAR = computeEAR(rightEyePts);
             double avgEAR = (leftEAR + rightEAR) / 2.0;
-            cv::putText(result_image, "EAR: " + std::to_string(avgEAR).substr(0,4), cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 0), 2);
+            cv::putText(result_image, "EAR: " + std::to_string(avgEAR).substr(0,4), cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 0), 2);
 
             drawLandmarkPoints(result_image, leftEyePts);
             drawLandmarkPoints(result_image, rightEyePts);
@@ -167,19 +168,19 @@ void FatigueDetect::detectFatigue(cv::Mat& image, dlib::shape_predictor& pose_mo
                     std::chrono::steady_clock::now() - eyeCloseStart).count();
                 if (dur >= EYE_CLOSED_TIME_THRESH) {
                     cv::putText(result_image, "ALERT: Eyes Closed Too Long!",
-                        cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,255), 2);
+                        cv::Point(10, 75), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,255), 2);
                     eyeClosed = false;
                 }
             }
 
-            cv::putText(result_image, "Blinks: " + std::to_string(eyeCloseCount), cv::Point(10, 210), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
+            cv::putText(result_image, "Blinks: " + std::to_string(eyeCloseCount), cv::Point(10, 90), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
         }
 
         // MAR 检测
         if (mouthPts.size() >= 11)
         {
             double mar = computeMAR(mouthPts);
-            putText(result_image, "MAR: " + std::to_string(mar).substr(0,4), cv::Point(10, 90), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 0), 2);
+            putText(result_image, "MAR: " + std::to_string(mar).substr(0,4), cv::Point(10, 140), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 0), 2);
 
             drawLandmarkPoints(result_image, mouthPts);
 
@@ -209,25 +210,25 @@ void FatigueDetect::detectFatigue(cv::Mat& image, dlib::shape_predictor& pose_mo
                     std::chrono::steady_clock::now() - mouthOpenStart).count();
                 if (dur >= MOUTH_OPEN_TIME_THRESH) {
                     cv::putText(result_image, "ALERT: Yawning Detected!",
-                        cv::Point(10, 120), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,255), 2);
+                        cv::Point(10, 155), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,255), 2);
                     mouthOpen = false;
                 }
             }
 
-            cv::putText(result_image, "Yawns: " + std::to_string(yawnCount), cv::Point(10, 240), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
+            cv::putText(result_image, "Yawns: " + std::to_string(yawnCount), cv::Point(10, 170), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
         }
 
         // 头部姿态 Pitch（点头检测）
         cv::Vec3d eulerAngles = getHeadPose(shape, cam_matrix, dist_coeffs, object_pts);
         double pitch = eulerAngles[0]; // 俯仰角
-        cv::putText(result_image, "Pitch: " + std::to_string(pitch).substr(0,5), cv::Point(10, 150), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 0), 2);
+        cv::putText(result_image, "Pitch: " + std::to_string(pitch).substr(0,5), cv::Point(10, 220), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 0), 2);
 
         // 绘制立方体的12条边
         for (int i = 0; i < 12; ++i)
         {
             cv::Point2f p1 = reprojectdst[line_pairs[i][0]];
             cv::Point2f p2 = reprojectdst[line_pairs[i][1]];
-            
+
             p1.x += x;  p1.y += y;
             p2.x += x;  p2.y += y;
             
@@ -263,12 +264,12 @@ void FatigueDetect::detectFatigue(cv::Mat& image, dlib::shape_predictor& pose_mo
                 std::chrono::steady_clock::now() - nodStart).count();
             if (dur >= NOD_TIME_THRESH) {
                 cv::putText(result_image, "ALERT: Nodding Detected!",
-                    cv::Point(10, 180), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,255), 2);
+                    cv::Point(10, 235), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,255), 2);
                 isNodding = false;
             }
         }
 
-        cv::putText(result_image, "Nods: " + std::to_string(nodCount), cv::Point(10, 270), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
+        cv::putText(result_image, "Nods: " + std::to_string(nodCount), cv::Point(10, 250), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
     }
 
     // 每60s判断一次疲劳

@@ -11,7 +11,7 @@ find_package(dlib REQUIRED)
 include_directories(
     ${CMAKE_CURRENT_BINARY_DIR}
     include
-    /home/hit/facial_landmark/facedetection/include
+    /home/hit/fatigue_detection/facedetection/include
     ${dlib_INCLUDE_DIRS}  
 )
 
@@ -21,5 +21,5 @@ set_target_properties(detect PROPERTIES CXX_STANDARD 11)
 target_link_libraries(detect
     ${OpenCV_LIBS}
     ${dlib_LIBRARIES}  
-    /home/hit/pfld_ncnn/facedetection/lib/libfacedetection.so
+    /home/hit/fatigue_detection/facedetection/lib/libfacedetection.so
 )
