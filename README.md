@@ -80,7 +80,7 @@ $./detect  xxx.mp4  # 调用视频推理
 
 简单的检测结果如下：
 
-![微信截图_20250509113223](C:\Users\HIT-HAYES\Desktop\微信截图_20250509113223.png)
+![image_1.png](https://github.com/zhahoi/fatigue_detection/blob/main/docs/image_1.png)
 
 
 
