@@ -49,8 +49,11 @@ private:
                         const cv::Scalar& color = cv::Scalar(0, 255, 0), int radius = 2, int thickness = -1);
 
 private:
+    // 连续帧数判定
+    const int CONSEC_FRAMES = 3;
+
     // EAR阈值和时间阈值（单位：秒）
-    const double EYE_AR_THRESH = 0.21;
+    const double EYE_AR_THRESH = 0.20;
     const double EYE_CLOSED_TIME_THRESH = 2.0;
     // 状态记录变量
     bool eyeClosed = false;
@@ -58,14 +61,14 @@ private:
 
     // MAR阈值和时间阈值（单位：秒）
     const double MOUTH_AR_THRESH = 0.65;
-    const double MOUTH_OPEN_TIME_THRESH = 1.5;
+    const double MOUTH_OPEN_TIME_THRESH = 2.0;
     // 状态记录变量
     bool mouthOpen = false;
     std::chrono::steady_clock::time_point mouthOpenStart;
 
     // 点头持续时间阈值（秒）
-    const double PITCH_NOD_THRESH = 20.0;  // 点头阈值（单位：角度）
-    const double NOD_TIME_THRESH = 1.0;    // 点头持续时间阈值（秒）
+    const double PITCH_NOD_THRESH = 25.0;  // 点头阈值（单位：角度）
+    const double NOD_TIME_THRESH = 2.0;    // 点头持续时间阈值（秒）
     bool isNodding = false;
     std::chrono::steady_clock::time_point nodStart;
 
@@ -95,9 +98,39 @@ private:
     cv::Mat cam_matrix = cv::Mat(3, 3, CV_64FC1, K);
     cv::Mat dist_coeffs = cv::Mat(5, 1, CV_64FC1, D);
 
+    // 用于绘制3D立方体
+    const std::vector<cv::Point3f> reprojectsrc = {
+        { 10.0f,  10.0f,  10.0f},
+        { 10.0f,  10.0f, -10.0f},
+        { 10.0f, -10.0f, -10.0f},
+        { 10.0f, -10.0f,  10.0f},
+        {-10.0f,  10.0f,  10.0f},
+        {-10.0f,  10.0f, -10.0f},
+        {-10.0f, -10.0f, -10.0f},
+        {-10.0f, -10.0f,  10.0f}
+    };
+
+    // 12 条边，每条由两个顶点索引组成
+    const int line_pairs[12][2] = {
+        {0,1},{1,2},{2,3},{3,0},
+        {4,5},{5,6},{6,7},{7,4},
+        {0,4},{1,5},{2,6},{3,7}
+    };
+
+    std::vector<cv::Point2f> reprojectdst;
+
+    // 统计次数
     int eyeCloseCount = 0;
     int yawnCount = 0;
     int nodCount = 0;
+
+    // 连续帧计数，用于“3帧触发一次事件”
+    int eyeFrameCount   = 0;
+    int mouthFrameCount = 0;
+    int nodFrameCount   = 0;
+
+    // 滑动窗口开始时间，用于一分钟内事件累积 
+    std::chrono::steady_clock::time_point windowStart = std::chrono::steady_clock::now();
 };
 
 #endif

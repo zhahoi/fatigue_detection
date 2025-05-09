@@ -64,6 +64,8 @@ cv::Vec3d FatigueDetect::getHeadPose(const dlib::full_object_detection& shape,
     cv::Mat rvec, tvec;
     cv::solvePnP(object_pts, image_pts, cam_matrix, dist_coeffs, rvec, tvec);
 
+    cv::projectPoints(reprojectsrc, rvec, tvec, cam_matrix, dist_coeffs, reprojectdst);
+
     cv::Mat rotation_mat;
     cv::Rodrigues(rvec, rotation_mat);
 
@@ -74,7 +76,11 @@ cv::Vec3d FatigueDetect::getHeadPose(const dlib::full_object_detection& shape,
     cv::decomposeProjectionMatrix(pose_mat, out_intrinsics, out_rotation, out_translation, 
                     cv::noArray(), cv::noArray(), cv::noArray(), euler_angle);
 
-    return cv::Vec3d(euler_angle.at<double>(0),  euler_angle.at<double>(1),  euler_angle.at<double>(2));
+    double pitch = euler_angle.at<double>(0); // x
+    double yaw   = euler_angle.at<double>(1); // y
+    double roll  = euler_angle.at<double>(2); // z
+
+    return cv::Vec3d(pitch, yaw, roll);
 }
 
 void FatigueDetect::drawLandmarkPoints(cv::Mat& image, const std::vector<cv::Point>& points, 
@@ -137,21 +143,36 @@ void FatigueDetect::detectFatigue(cv::Mat& image, dlib::shape_predictor& pose_mo
 
             if (avgEAR < EYE_AR_THRESH)
             {
-                if (!eyeClosed) {
-                    eyeClosed = true;
-                    eyeCloseStart = std::chrono::steady_clock::now();
-                } else {
-                    double duration = std::chrono::duration<double>(std::chrono::steady_clock::now() - eyeCloseStart).count();
-                    if (duration >= EYE_CLOSED_TIME_THRESH) {
-                        eyeCloseCount++;  
-                        eyeClosed = false; 
-                        cv::putText(result_image, "ALERT: Eyes Closed Too Long!", cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 0, 255), 2);
-                    } else {
-                        cv::putText(result_image, "Blinking...", cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 255), 2);
-                    }
+                eyeFrameCount++;
+            }else{
+                eyeFrameCount = 0;
+                eyeClosed = false;
+            }
+
+            // 连续三帧，视为一次“眨眼事件”
+            if (eyeFrameCount >= CONSEC_FRAMES)
+            {
+                eyeCloseCount++;
+                eyeFrameCount = 0;
+                eyeClosed = false;
+            }
+
+            // 当单次闭眼时长也超过阈值时，直接报警
+            if (avgEAR < EYE_AR_THRESH && !eyeClosed) 
+            {
+                eyeClosed = true;
+                eyeCloseStart = std::chrono::steady_clock::now();
+            } else if (eyeClosed) {
+                double dur = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - eyeCloseStart).count();
+                if (dur >= EYE_CLOSED_TIME_THRESH) {
+                    cv::putText(result_image, "ALERT: Eyes Closed Too Long!",
+                        cv::Point(10, 60), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,255), 2);
+                    eyeClosed = false;
                 }
-            } else eyeClosed = false;
-            cv::putText(result_image, "Eye Closes: " + std::to_string(eyeCloseCount), cv::Point(10, 210), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
+            }
+
+            cv::putText(result_image, "Blinks: " + std::to_string(eyeCloseCount), cv::Point(10, 210), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
         }
 
         // MAR 检测
@@ -164,46 +185,109 @@ void FatigueDetect::detectFatigue(cv::Mat& image, dlib::shape_predictor& pose_mo
 
             if (mar > MOUTH_AR_THRESH)
             {
-                if (!mouthOpen) {
-                    mouthOpen = true;
-                    mouthOpenStart = std::chrono::steady_clock::now();
-                } else {
-                    double mouthDuration = std::chrono::duration<double>(std::chrono::steady_clock::now() - mouthOpenStart).count();
-                    if (mouthDuration >= MOUTH_OPEN_TIME_THRESH) {
-                        yawnCount++;  
-                        mouthOpen = false;
-                        cv::putText(result_image, "ALERT: Yawning Detected!", cv::Point(10, 120), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 0, 255), 2);
-                    } else {
-                        cv::putText(result_image, "Mouth Open...", cv::Point(10, 120), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 255), 2);
-                    }
+                mouthFrameCount++;
+            } else {
+                mouthFrameCount = 0;
+                mouthOpen = false;
+            }
+
+            // 连续三帧，视为一次“哈欠事件”
+            if (mouthFrameCount >= CONSEC_FRAMES)
+            {
+                yawnCount++;
+                mouthFrameCount = 0;
+                mouthOpen = false;
+            }
+
+            // 当单次张嘴持续时长超过阈值时，直接报警
+            if (mar < MOUTH_AR_THRESH && !mouthOpen) 
+            {
+                mouthOpen = true;
+                mouthOpenStart = std::chrono::steady_clock::now();
+            } else if (mouthOpen) {
+                double dur = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - mouthOpenStart).count();
+                if (dur >= MOUTH_OPEN_TIME_THRESH) {
+                    cv::putText(result_image, "ALERT: Yawning Detected!",
+                        cv::Point(10, 120), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,255), 2);
+                    mouthOpen = false;
                 }
-            } else mouthOpen = false;
+            }
+
             cv::putText(result_image, "Yawns: " + std::to_string(yawnCount), cv::Point(10, 240), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
         }
 
         // 头部姿态 Pitch（点头检测）
         cv::Vec3d eulerAngles = getHeadPose(shape, cam_matrix, dist_coeffs, object_pts);
-        double pitch = eulerAngles[0];
+        double pitch = eulerAngles[0]; // 俯仰角
         cv::putText(result_image, "Pitch: " + std::to_string(pitch).substr(0,5), cv::Point(10, 150), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 0), 2);
+
+        // 绘制立方体的12条边
+        for (int i = 0; i < 12; ++i)
+        {
+            cv::Point2f p1 = reprojectdst[line_pairs[i][0]];
+            cv::Point2f p2 = reprojectdst[line_pairs[i][1]];
+            
+            p1.x += x;  p1.y += y;
+            p2.x += x;  p2.y += y;
+            
+            cv::line(
+                result_image,
+                p1, p2,
+                cv::Scalar(0, 0, 255), 2, cv::LINE_AA
+            );
+        }
 
         if (pitch > PITCH_NOD_THRESH)
         {
-            if (!isNodding) {
-                isNodding = true;
-                nodStart = std::chrono::steady_clock::now();
-            } else {
-                double nodDuration = std::chrono::duration<double>(std::chrono::steady_clock::now() - nodStart).count();
-                if (nodDuration >= NOD_TIME_THRESH) {
-                    nodCount++;  
-                    isNodding = false;
-                    cv::putText(result_image, "ALERT: Nodding Detected!", cv::Point(10, 180), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 0, 255), 2);
-                } else {
-                    cv::putText(result_image, "Nodding...", cv::Point(10, 180), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 255), 2);
-                }
+            nodFrameCount++;
+        } else {
+            nodFrameCount = 0;
+            isNodding = false;
+        }
+
+        // 连续三帧，视为一次“点头事件”
+        if (nodFrameCount >= CONSEC_FRAMES)
+        {
+            nodCount++;
+            nodFrameCount = 0;
+            isNodding = false;
+        }
+
+        // 单词点头持续时长检测
+        if (pitch > PITCH_NOD_THRESH && !isNodding) {
+            isNodding = true;
+            nodStart = std::chrono::steady_clock::now();
+        } else if (isNodding) {
+            double dur = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - nodStart).count();
+            if (dur >= NOD_TIME_THRESH) {
+                cv::putText(result_image, "ALERT: Nodding Detected!",
+                    cv::Point(10, 180), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0,0,255), 2);
+                isNodding = false;
             }
-        } else isNodding = false;
+        }
+
         cv::putText(result_image, "Nods: " + std::to_string(nodCount), cv::Point(10, 270), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255,0,255), 2);
     }
 
-    cv::imshow("Face Detection with Landmarks", result_image);
+    // 每60s判断一次疲劳
+    auto now = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(now - windowStart).count();
+    if (elapsed >= 60.0)
+    {
+        bool f_eye = eyeCloseCount > 25;
+        bool f_yawn = yawnCount > 5;
+        bool f_nod = nodCount > 6;
+        if (f_eye || f_yawn || f_nod)
+        {
+            cv::putText(result_image, ">>> DRIVER FATIGUE <<<", cv::Point(10, 310), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0,0,255), 3);
+        }
+
+        // 重置计数和窗口
+        eyeCloseCount = yawnCount = nodCount = 0;
+        windowStart = now;
+    }
+
+    cv::imshow("Fatigue Detection with Landmarks", result_image);
 }
